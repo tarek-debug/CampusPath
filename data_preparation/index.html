@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Pixel Clicker</title>
+  <style>
+    body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+    #canvas { border: 1px solid #ccc; cursor: crosshair; }
+    #coords { margin-top: 10px; }
+    input[type="file"] { margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Image Pixel Clicker</h1>
+  <input type="file" id="fileInput" accept="image/*">
+  <canvas id="canvas"></canvas>
+  <div id="coords">Click on the image to see coordinates</div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const coordsDiv = document.getElementById('coords');
+    let img = new Image();
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+      };
+      img.src = url;
+    });
+
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor(e.clientX - rect.left);
+      const y = Math.floor(e.clientY - rect.top);
+      coordsDiv.textContent = `X: ${x}, Y: ${y}`;
+      // draw marker
+      ctx.drawImage(img, 0, 0);
+      ctx.fillStyle = 'red';
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+  </script>
+</body>
+</html>
