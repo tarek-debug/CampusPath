@@ -81,7 +81,17 @@ Then visit [http://localhost:5000](http://localhost:5000)
 
 ## Screenshot
 
-*Include a screenshot here of the app interface and map overlay*
+Here’s what the CampusPath experience looks like:
+
+### 🔴 Route Overlay on Map
+
+![Route Overlay](sample_route_overlay.png)
+
+---
+
+### 💬 Web Interface with Natural Directions
+
+![Web Interface](sample_webpage_output.png)
 
 ---
 
