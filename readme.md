@@ -5,7 +5,7 @@ CampusPath is an interactive web-based application that allows users to request 
 
 ---
 
-## 🌐 Features
+## Features
 
 - Fuzzy search of building names (handles typos or informal names)
 - Natural paragraph-style directions using Ollama + Dolphin3/Gemma3
