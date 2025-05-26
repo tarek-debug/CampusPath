@@ -45,7 +45,7 @@ cd CampusPath/app
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r ../requirements.txt
+pip install -r requirements.txt
 ```
 
 ### 3. (Optional) Install Ollama Locally
@@ -59,6 +59,7 @@ ollama run gemma3:1b
 ### 4. Run the App
 
 ```bash
+cd app
 python3 app.py
 ```
 
