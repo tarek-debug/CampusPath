@@ -1,0 +1,9 @@
+version: '3.8'
+services:
+  campuspath:
+    build: .
+    ports:
+      - "5432:5432"  # Expose container port 5000 to your laptop
+    volumes:
+      - .:/app
+    restart: unless-stopped
