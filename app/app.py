@@ -57,8 +57,9 @@ def polish_with_ollama(feet_lines):
         cmd = [OLLAMA_EXE, "run", OLLAMA_IMAGE]
     else:
         # Windows fallback via PowerShell
-        script = f"echo \"{prompt.replace('\"', '`\"')}\" | ollama run {OLLAMA_IMAGE}"
-        cmd = [OLLAMA_EXE, "/c", script]
+        safe_prompt = prompt.replace('"', '`"')
+        script = f'echo "{safe_prompt}" | ollama run {OLLAMA_IMAGE}'
+        cmd = [OLLAMA_EXE, "-Command", script]
 
     print(f"[🚀] Running: {' '.join(cmd)}")
 

@@ -112,7 +112,7 @@ The `data_preparation/` folder includes:
 * Uses `rapidfuzz` or `fuzzywuzzy` for matching
 * Uses `scipy.spatial.KDTree` for nearest-node snapping
 * Tested on WSL with Python 3.10 and 3.12
-* If Ollama is installed only in Windows, WSL calls it via PowerShell
+* If Ollama is installed only in Windows, WSL calls it via PowerShell using `-Command`
 
 ---
 
