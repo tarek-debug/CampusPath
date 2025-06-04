@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys, json, subprocess, shutil, os
-from flask import Flask, request, render_template_string, send_from_directory
+from flask import Flask, request, render_template_string, send_from_directory, jsonify
+import numpy as np
 
 # try rapidfuzz, else fuzzywuzzy
 try:
@@ -11,6 +12,24 @@ except ImportError:
 from generate_directions_with_feet import compute_route, draw_overlay
 
 app = Flask(__name__)
+
+# ─── Globals for GPS tracking ─────────────────────────────────────────────
+current_latlon = None  # (lat, lon)
+current_pixel  = None  # (x, y)
+
+REF_POINTS = [
+    ((41.12345, -72.54321), (1000, 800)),
+    ((41.12390, -72.54250), (1400, 500)),
+]
+_A, _res, *_ = np.linalg.lstsq(
+    np.array([[lon, lat, 1] for (lat, lon), _ in REF_POINTS]),
+    np.array([[x, y] for _, (x, y) in REF_POINTS]),
+    rcond=None
+)
+
+def gps_to_pixel(lat, lon):
+    x, y = np.dot([lon, lat, 1], _A)
+    return int(x), int(y)
 
 # ─── Load building list ────────────────────────────────────────────────────
 b2n = json.load(open("building_to_node_mapping.json"))
@@ -125,6 +144,16 @@ HTML = """
       white-space: pre-wrap;
       word-wrap: break-word;
     }
+    #map-wrapper { position: relative; display: none; }
+    #gps-dot {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: red;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -161,6 +190,39 @@ HTML = """
     <a href="/route_overlay.png" target="_blank">View Overlay Map 📍</a>
   </div>
 {% endif %}
+<div id="map-wrapper">
+  <img id="map" src="/route_overlay.png">
+  <div id="gps-dot"></div>
+</div>
+
+<script>
+if (navigator.geolocation) {
+    document.getElementById('map-wrapper').style.display = 'inline-block';
+    navigator.geolocation.watchPosition(function(pos) {
+        fetch('/update_location', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({lat: pos.coords.latitude, lon: pos.coords.longitude})
+        });
+    });
+    setInterval(async () => {
+        const r = await fetch('/get_location');
+        const j = await r.json();
+        if (j.x != null && j.y != null) {
+            const img = document.getElementById('map');
+            const dot = document.getElementById('gps-dot');
+            const w = img.width, h = img.height;
+            const x = Math.max(0, Math.min(w, j.x));
+            const y = Math.max(0, Math.min(h, j.y));
+            dot.style.left = x + 'px';
+            dot.style.top  = y + 'px';
+            dot.style.display = 'block';
+        }
+    }, 2000);
+} else {
+    document.getElementById('map-wrapper').style.display = 'none';
+}
+</script>
 
 </body>
 </html>
@@ -194,6 +256,26 @@ def index():
 @app.route('/route_overlay.png')
 def overlay():
     return send_from_directory('.', 'route_overlay.png')
+
+@app.route('/update_location', methods=['POST'])
+def update_location():
+    global current_latlon, current_pixel
+    data = request.get_json(force=True) or {}
+    lat = data.get('lat')
+    lon = data.get('lon')
+    if lat is None or lon is None:
+        return jsonify({'status': 'error', 'msg': 'lat/lon required'}), 400
+    current_latlon = (lat, lon)
+    current_pixel = gps_to_pixel(lat, lon)
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/get_location')
+def get_location():
+    if current_pixel is None:
+        return jsonify({})
+    x, y = current_pixel
+    return jsonify({'x': int(x), 'y': int(y)})
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)
