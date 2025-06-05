@@ -196,6 +196,9 @@ def index():
     error = raw = polished = None
     used_gps_start = None
 
+    path_json = None
+    show_start = False
+
     if request.method == "POST":
         use_current = request.form.get("use_current") == "on"
         b = request.form["end"].strip()
@@ -238,8 +241,21 @@ def index():
                 )
 
                 polished = polish_with_ollama(feet)
+                path_json = json.dumps(path, default=lambda o: int(o) if isinstance(o, np.integer) else str(o))
+                show_start = use_current
 
-    return render_template_string(HTML, error=error, raw=raw, polished=polished, request=request, buildings=BUILDINGS, used_gps_start=used_gps_start)
+
+    return render_template_string(
+        HTML,
+        error=error,
+        raw=raw,
+        polished=polished,
+        request=request,
+        buildings=BUILDINGS,
+        used_gps_start=used_gps_start,
+        path_json=path_json,
+        show_start=show_start,
+    )
 
 
 @app.route("/route_overlay.png")
