@@ -88,10 +88,20 @@ def make_instructions(landmarks, bcoords, factor):
     ft_lines.append(f"Arrive at {last}.")
     return pix_lines, ft_lines
 
+def _dotted_line(img, a, b, color=(255, 0, 0), spacing=15):
+    """Draw a dotted line between ``a`` and ``b``."""
+    dist = int(math.hypot(b[0] - a[0], b[1] - a[1]))
+    for i in range(0, dist + 1, spacing):
+        t = i / dist if dist else 0
+        x = int(a[0] + (b[0] - a[0]) * t)
+        y = int(a[1] + (b[1] - a[1]) * t)
+        cv2.circle(img, (x, y), 3, color, -1)
+
+
 def draw_overlay(path, landmarks, bcoords):
     img = cv2.imread(INPUT_MAP)
     for a, b in zip(path, path[1:]):
-        cv2.line(img, tuple(a), tuple(b), (0, 0, 255), 2)
+        _dotted_line(img, a, b)
     for nm, _ in landmarks:
         x, y = map(int, bcoords[nm])
         cv2.circle(img, (x, y), 10, (0, 255, 0), -1)
