@@ -54,6 +54,8 @@ app.permanent_session_lifetime = timedelta(hours=1)
 # ─── Load building list ────────────────────────────────────────────────────
 b2n = json.load(open(os.path.join(os.path.dirname(__file__), "building_to_node_mapping.json")))
 BUILDINGS = list(b2n.keys())
+# also load building coordinates for nearest-building lookup
+BCOORDS = json.load(open(os.path.join(os.path.dirname(__file__), "building_coordinates_all.json")))
 # ────────────────────────────────────────────────────────────────────────────
 
 
@@ -77,6 +79,27 @@ def gps_to_pixel(lat, lon):
     pixel_array = mapper.pixel_pts  # shape (N,2): [ [x, y], ... ]
     x_anchor, y_anchor = pixel_array[idx]
     return int(round(x_anchor)), int(round(y_anchor))
+#
+# Helper used when we want to ensure the GPS point is actually inside
+# the calibrated area. Returns None if outside instead of falling back.
+def gps_to_pixel_strict(lat, lon):
+    xy = mapper.gps_to_pixel(lat, lon)
+    if xy is None:
+        return None
+    return int(round(xy[0])), int(round(xy[1]))
+
+# Determine the closest known building to a given pixel (x, y)
+def nearest_building(x, y):
+    best = None
+    best_d2 = None
+    for b, (bx, by) in BCOORDS.items():
+        dx = bx - x
+        dy = by - y
+        d2 = dx * dx + dy * dy
+        if best_d2 is None or d2 < best_d2:
+            best = b
+            best_d2 = d2
+    return best
 # ────────────────────────────────────────────────────────────────────────────
 
 
@@ -125,8 +148,9 @@ def polish_with_ollama(feet_lines):
 
     if OLLAMA_EXE == "ollama":
         # Native WSL
-        cmd = [OLLAMA_EXE, "run", OLLAMA_IMAGE, "--stdin"]
+        cmd = [OLLAMA_EXE, "run", OLLAMA_IMAGE]
         input_data = prompt.encode("utf-8")
+
     else:
         # Windows fallback via PowerShell
         # We need to escape quotes inside the prompt for PowerShell
@@ -170,32 +194,52 @@ from html_template import HTML
 @app.route("/", methods=["GET", "POST"])
 def index():
     error = raw = polished = None
+    used_gps_start = None
 
     if request.method == "POST":
-        a = request.form["start"].strip()
+        use_current = request.form.get("use_current") == "on"
         b = request.form["end"].strip()
-        s = fuzzy_building(a)
-        e = fuzzy_building(b)
+        end_building = fuzzy_building(b)
 
-        if not s or not e:
-            error = f"Could not match “{a}” or “{b}” to campus buildings."
+        start_building = None
+        if use_current:
+            gps = session.get("gps")
+            if not gps:
+                error = "Current location unavailable."
+            else:
+                # First attempt strict conversion. If that fails, fall back to
+                # the approximate mapping and only report off-campus if that
+                # also fails (very unlikely).
+                xy = gps_to_pixel_strict(gps["lat"], gps["lon"])
+                if xy is None:
+                    xy = gps_to_pixel(gps["lat"], gps["lon"])
+                if xy is None:
+                    error = "You appear to be off campus."
+                else:
+                    start_building = nearest_building(*xy)
+                    used_gps_start = start_building
         else:
-            from generate_directions_with_feet import compute_route, draw_overlay
+            a = request.form["start"].strip()
+            start_building = fuzzy_building(a)
 
-            pix, feet, path, landmarks = compute_route(s, e)
-            raw = "\n".join(feet)
+        if not error:
+            if not start_building or not end_building:
+                error = f"Could not match “{request.form.get('start','')}” or “{b}” to campus buildings."
+            else:
+                from generate_directions_with_feet import compute_route, draw_overlay
 
-            # redraw route overlay onto original PNG
-            draw_overlay(
-                path,
-                landmarks,
-                json.load(open(os.path.join(os.path.dirname(__file__), "building_coordinates_all.json")))
-            )
+                pix, feet, path, landmarks = compute_route(start_building, end_building)
+                raw = "\n".join(feet)
 
-            # attempt to polish
-            polished = polish_with_ollama(feet)
+                draw_overlay(
+                    path,
+                    landmarks,
+                    BCOORDS
+                )
 
-    return render_template_string(HTML, error=error, raw=raw, polished=polished, request=request)
+                polished = polish_with_ollama(feet)
+
+    return render_template_string(HTML, error=error, raw=raw, polished=polished, request=request, buildings=BUILDINGS, used_gps_start=used_gps_start)
 
 
 @app.route("/route_overlay.png")
