@@ -57,6 +57,25 @@ HTML = """
       transform-origin: top left;
       transition: transform 0.1s ease;
     }
+    #route-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+    #center-btn {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      z-index: 11;
+    }
+    #start-btn {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      z-index: 11;
+    }
     #gps-dot {
       position: absolute;
       width: 10px;
@@ -126,9 +145,12 @@ HTML = """
 {% endif %}
 
 <div id="map-wrapper">
-  <img id="map" src="{{'route_overlay.png' if raw else 'trinity_map_original.png'}}">
+  <img id="map" src="trinity_map_original.png">
+  <canvas id="route-canvas"></canvas>
   <div id="gps-dot" style="display:none;"></div>
   <div id="gps-error-circle" style="display:none;"></div>
+  <button id="center-btn" type="button">⌖</button>
+  <button id="start-btn" type="button" style="display:none;">Start</button>
 </div>
 
 <script>
@@ -138,14 +160,43 @@ const map = document.getElementById('map');
 const wrapper = document.getElementById('map-wrapper');
 const startInput = document.getElementById('start');
 const useCurrent = document.getElementById('use_current');
+const canvas = document.getElementById('route-canvas');
+const ctx = canvas.getContext('2d');
+const centerBtn = document.getElementById('center-btn');
+const startBtn = document.getElementById('start-btn');
+const pathData = {{ path_json|safe if path_json else 'null' }};
+const showStart = {{ 'true' if show_start else 'false' }};
+let walkedIndex = 0;
+let started = false;
+let currentX = null;
+let currentY = null;
+
+if (showStart && startBtn) startBtn.style.display = 'block';
 
 useCurrent.addEventListener('change', () => {
   startInput.disabled = useCurrent.checked;
 });
 
+if (startBtn) {
+  startBtn.addEventListener('click', () => {
+    started = true;
+  });
+}
+
+if (centerBtn) {
+  centerBtn.addEventListener('click', () => {
+    if (currentX == null || currentY == null) return;
+    offsetX = wrapper.clientWidth / 2 - currentX * zoomLevel;
+    offsetY = wrapper.clientHeight / 2 - currentY * zoomLevel;
+    updateMapPosition();
+  });
+}
+
 function setZoom(level) {
   zoomLevel = Math.max(0.2, Math.min(4.0, level));
   map.style.transform = `scale(${zoomLevel})`;
+  canvas.style.transform = `scale(${zoomLevel})`;
+  drawPath();
   updateOverlayPosition(); // ensure GPS stays accurate
 }
 
@@ -199,7 +250,10 @@ document.addEventListener('touchmove', (e) => {
 function updateMapPosition() {
   map.style.left = offsetX + 'px';
   map.style.top  = offsetY + 'px';
+  canvas.style.left = offsetX + 'px';
+  canvas.style.top  = offsetY + 'px';
   updateOverlayPosition();
+  drawPath();
 }
 
 // Reposition dot + error circle on every map move
@@ -217,6 +271,50 @@ function updateOverlayPosition() {
     ring.style.height = (250 * zoomLevel) + 'px';
   }
 }
+
+function resizeCanvas() {
+  canvas.width = map.naturalWidth;
+  canvas.height = map.naturalHeight;
+  drawPath();
+}
+
+function drawPath() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!pathData) return;
+  ctx.setLineDash([10, 10]);
+  ctx.lineWidth = 4;
+  for (let i = 0; i < pathData.length - 1; i++) {
+    ctx.strokeStyle = i < walkedIndex ? '#888' : 'blue';
+    ctx.beginPath();
+    ctx.moveTo(pathData[i][0], pathData[i][1]);
+    ctx.lineTo(pathData[i + 1][0], pathData[i + 1][1]);
+    ctx.stroke();
+  }
+}
+
+function updateProgress(x, y) {
+  if (!started || !pathData) return;
+  let best = Infinity;
+  let idx = walkedIndex;
+  for (let i = walkedIndex; i < pathData.length; i++) {
+    const dx = pathData[i][0] - x;
+    const dy = pathData[i][1] - y;
+    const d = Math.hypot(dx, dy);
+    if (d < best) {
+      best = d;
+      idx = i;
+    }
+  }
+  if (best < 20) walkedIndex = idx;
+  if (walkedIndex >= pathData.length - 1 && best < 20) {
+    alert('You have arrived!');
+    started = false;
+  }
+  drawPath();
+}
+
+map.addEventListener('load', resizeCanvas);
+if (map.complete) resizeCanvas();
 
 // GPS tracking
 if (navigator.geolocation) {
@@ -238,10 +336,14 @@ if (navigator.geolocation) {
       dot.dataset.x = j.x;
       dot.dataset.y = j.y;
 
+      currentX = j.x;
+      currentY = j.y;
+
       dot.style.display = 'block';
       ring.style.display = 'block';
 
       updateOverlayPosition();
+      updateProgress(j.x, j.y);
     }
   }, 1000);
 }
