@@ -9,6 +9,7 @@ HTML = """
       margin: 2rem auto;
       max-width: 800px;
       padding: 0 1rem;
+      background: #f0f8ff;
     }
     h1 {
       color: #333;
@@ -22,12 +23,13 @@ HTML = """
       font-size: 1rem;
     }
     .box {
-      background: #f9f9f9;
+      background: #ffffff;
       border: 1px solid #ddd;
       padding: 1rem;
       margin-bottom: 1rem;
       border-radius: 5px;
       overflow-x: auto;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       max-width: 100%;
     }
     .error {
@@ -79,11 +81,23 @@ HTML = """
 <body>
 
 <h1>Campus Navigator</h1>
-<form method=post>
-  From: <input type="text" name="start" value="{{request.form.start or ''}}" required>
-  To:   <input type="text" name="end"   value="{{request.form.end or ''}}" required>
+<form method="post">
+  From:
+  <input id="start" type="text" name="start" list="building-list" value="{{request.form.start or ''}}">
+  <label><input type="checkbox" name="use_current" id="use_current"> Use my location</label>
+  <br>
+  To:
+  <input id="end" type="text" name="end" list="building-list" value="{{request.form.end or ''}}" required>
   <input type="submit" value="Go">
 </form>
+<datalist id="building-list">
+{% for b in buildings %}
+  <option value="{{b}}">
+{% endfor %}
+</datalist>
+{% if used_gps_start %}
+  <div class="box">Starting near: {{used_gps_start}}</div>
+{% endif %}
 
 {% if error %}
   <div class="box error">{{error}}</div>
@@ -122,6 +136,12 @@ let zoomLevel = 1.0;
 let offsetX = 0, offsetY = 0;
 const map = document.getElementById('map');
 const wrapper = document.getElementById('map-wrapper');
+const startInput = document.getElementById('start');
+const useCurrent = document.getElementById('use_current');
+
+useCurrent.addEventListener('change', () => {
+  startInput.disabled = useCurrent.checked;
+});
 
 function setZoom(level) {
   zoomLevel = Math.max(0.2, Math.min(4.0, level));
