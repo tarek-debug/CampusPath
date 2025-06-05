@@ -34,19 +34,30 @@ else:
     }
 
 # ─── GPS to Pixel Conversion ───────────────────────────────────────────────
+import numpy as np
+
 def gps_to_pixel(lat, lon):
     if not gps_to_pixel_data:
         return None, None
-    # simple nearest-neighbor for now
-    min_dist = float('inf')
-    best_px = None
-    for key, px in gps_to_pixel_data.items():
-        plat, plon = map(float, key.split(","))
-        dist = (plat - lat)**2 + (plon - lon)**2
-        if dist < min_dist:
-            min_dist = dist
-            best_px = px
-    return best_px if best_px else (None, None)
+
+    gps_coords = []
+    pixel_coords = []
+
+    for point in gps_to_pixel_data:
+        gps_coords.append([point["lat"], point["lon"], 1])  # Bias for affine
+        pixel_coords.append([point["x"], point["y"]])
+
+    A = np.array(gps_coords)
+    B = np.array(pixel_coords)
+
+    try:
+        coeffs, _, _, _ = np.linalg.lstsq(A, B, rcond=None)
+        pred = np.dot([lat, lon, 1], coeffs)
+        return int(pred[0]), int(pred[1])
+    except Exception as e:
+        print("[❗] Interpolation failed:", e)
+        return None, None
+
 
 # ─── Fuzzy Matching ────────────────────────────────────────────────────────
 def fuzzy_building(name):
@@ -127,6 +138,9 @@ def index():
 @app.route('/route_overlay.png')
 def overlay():
     return send_from_directory('.', 'route_overlay.png')
+@app.route('/trinity_map_original.png')
+def original_map():
+    return send_from_directory('.', 'trinity_map_original.png')
 
 @app.route("/update_location", methods=["POST"])
 def update_location():
@@ -134,6 +148,7 @@ def update_location():
     lat, lon = data.get("lat"), data.get("lon")
     if lat is not None and lon is not None:
         session['gps'] = {'lat': lat, 'lon': lon}
+    print(f"📍 Received GPS coords: lat={lat}, lon={lon}")
     return "OK"
 
 @app.route("/get_location")
@@ -142,6 +157,7 @@ def get_location():
     if not gps:
         return jsonify(x=None, y=None)
     x, y = gps_to_pixel(gps['lat'], gps['lon'])
+    print(f"📍 Converting GPS ({gps['lat']}, {gps['lon']}) → Pixel ({x}, {y})")
     return jsonify(x=x, y=y)
 
 # ─── Main ──────────────────────────────────────────────────────────────────
